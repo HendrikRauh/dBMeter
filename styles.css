@@ -1,20 +1,48 @@
-body {
-    margin: 0;
+:root {
+    --red: #c72d2d;
+    --yellow: #ebc90b;
+    --green: #37d108;
+}
+
+html {
+    padding: 16px;
+    box-sizing: border-box;
     width: 100vw;
     height: 100vh;
 }
 
-label {
-    width: 100%;
+body {
+    margin: 0;
+    height: 100%;
+}
+
+.container {
+    width: max-content;
+    height: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+    background-color: white;
+    border-radius: 10px;
+
     display: flex;
-    align-items: center;
+    align-items: stretch;
 }
 
-label input {
-    flex-grow: 1;
+canvas.bar {
+    width: 50px;
 }
 
-canvas {
-    width: 100%;
-    height: 300px;
+.slider {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 25px;
+    height: 100%;
+}
+
+.yellow {
+    accent-color: var(--yellow);
+}
+
+.green {
+    accent-color: var(--green);
 }

@@ -1,101 +1,134 @@
-const form = document.querySelector("form#sliders");
+const c = {
+    element: document.querySelector("canvas.bar"),
+    ctx: document.querySelector("canvas.bar").getContext("2d"),
 
-let threshold1 = null;
-let threshold2 = null;
-let speed = 20;
-let maxAmplitude = 0;
+    get width() {
+        return this.element.width;
+    },
 
-const canvas = document.querySelector("canvas");
-const WIDTH = canvas.width;
-const HEIGHT = canvas.height;
-const canvasCtx = canvas.getContext("2d");
-canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+    get height() {
+        return this.element.height;
+    },
+};
 
-const analyser = await createMicAnalyzer();
-const bufferLength = analyser.frequencyBinCount;
-const dataArray = new Uint8Array(bufferLength);
+const _analyser = await createMicAnalyzer();
+const sound = {
+    analyser: _analyser,
+    dataArray: new Uint8Array(_analyser.frequencyBinCount),
+    threshold: {
+        green: null,
+        yellow: null,
+    },
+    hold: null,
+    heldAmplitude: 0,
+};
+
+const style = window.getComputedStyle(document.body);
+const color = {
+    red: style.getPropertyValue("--red"),
+    yellow: style.getPropertyValue("--yellow"),
+    green: style.getPropertyValue("--green"),
+    bar: "#4287f5",
+    plate: "#86b2f9",
+};
 
 async function createMicAnalyzer() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: false,
-  });
-  const audioContext = new AudioContext();
-  const mediaStreamAudioSourceNode =
-    audioContext.createMediaStreamSource(stream);
-  const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 2048;
-  mediaStreamAudioSourceNode.connect(analyser);
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+    });
+    const audioContext = new AudioContext();
+    const mediaStreamAudioSourceNode = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    mediaStreamAudioSourceNode.connect(analyser);
 
-  return analyser;
+    return analyser;
 }
 
 function frame() {
-  requestAnimationFrame(frame);
+    requestAnimationFrame(frame);
 
-  analyser.getByteTimeDomainData(dataArray);
+    sound.analyser.getByteTimeDomainData(sound.dataArray);
 
-  // drawGraph();
-
-  const amplitude = dataArray.reduce((max, value) => {
-    return Math.max(max, value - 128);
-  }, 0);
-  // maxAmplitude -= (maxAmplitude ** 2) / 20;
-  maxAmplitude -= Math.sqrt(maxAmplitude) / speed;
-  // - Math.max(0.1, (maxAmplitude > threshold2 ? threshold2 : threshold1) * 0.1)
-  maxAmplitude = Math.max(amplitude, maxAmplitude);
-  console.log(maxAmplitude, speed);
-  // const amplitude = Math.max.apply(Math, dataArray);
-
-  let bgColor;
-  if (maxAmplitude < threshold1) {
-    bgColor = "red";
-  } else if (maxAmplitude < threshold2) {
-    bgColor = "yellow";
-  } else {
-    bgColor = "green";
-  }
-  document.body.style.backgroundColor = bgColor;
-}
-
-function drawGraph() {
-  canvasCtx.fillStyle = "lightgrey";
-  canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
-
-  canvasCtx.lineWidth = 2;
-  canvasCtx.strokeStyle = "black";
-  canvasCtx.beginPath();
-  const sliceWidth = WIDTH / bufferLength;
-  let x = 0;
-  for (let i = 0; i < bufferLength; i++) {
-    const v = dataArray[i] / 128.0;
-    const y = v * (HEIGHT / 2);
-
-    if (i === 0) {
-      canvasCtx.moveTo(x, y);
+    const amplitude = sound.dataArray.reduce((max, value) => {
+        return Math.max(max, Math.abs(value - 128));
+    }, 0);
+    if (amplitude > sound.heldAmplitude) {
+        sound.heldAmplitude = amplitude;
     } else {
-      canvasCtx.lineTo(x, y);
+        sound.heldAmplitude -= Math.max(0.1, Math.sqrt(sound.heldAmplitude) / sound.hold);
     }
+    console.log(amplitude);
 
-    x += sliceWidth;
-  }
-  canvasCtx.lineTo(WIDTH, HEIGHT / 2);
-  canvasCtx.stroke();
+    drawBar(amplitude, sound.heldAmplitude);
+
+    document.body.style.backgroundColor = determineBgColor(sound.heldAmplitude);
 }
 
-form.addEventListener("input", (event) => {
-  console.log(event.target.id, event.target.value);
-  if (event.target.id === "slider1") {
-    threshold1 = event.target.value;
-  } else if (event.target.id === "slider2") {
-    threshold2 = event.target.value;
-  } else if (event.target.id === "slider-speed") {
-    speed = event.target.value;
-  }
+function drawBar(currentAmplitude, heldAmplitude) {
+    // background
+    c.ctx.fillStyle = "lightgrey";
+    c.ctx.fillRect(0, 0, c.width, c.height);
+
+    // bar (actual amplitude)
+    let height = (currentAmplitude / 128) * c.height;
+    c.ctx.fillStyle = color.bar;
+    c.ctx.fillRect(0, c.height - height, c.width, height);
+
+    // small plate (held amplitude)
+    const rectHeight = 15;
+    height = (heldAmplitude / 128) * c.height;
+    c.ctx.fillStyle = color.plate;
+    c.ctx.fillRect(0, c.height - height, c.width, rectHeight);
+
+    drawIndicator(color.yellow, sound.threshold.yellow);
+    drawIndicator(color.green, sound.threshold.green);
+}
+
+function drawIndicator(color, position) {
+    const height = 20;
+    const width = 12;
+    const yMiddle = c.height - (position / 128) * c.height;
+
+    c.ctx.strokeColor = "black";
+    c.ctx.strokeWidth = 2;
+    c.ctx.fillStyle = color;
+    c.ctx.beginPath();
+    c.ctx.moveTo(c.width, yMiddle - height / 2);
+    c.ctx.lineTo(c.width, yMiddle + height / 2);
+    c.ctx.lineTo(c.width - width, yMiddle);
+    c.ctx.closePath();
+    c.ctx.fill();
+    c.ctx.stroke();
+}
+
+function determineBgColor(amplitude) {
+    if (amplitude > sound.threshold.green) return color.green;
+    if (amplitude > sound.threshold.yellow) return color.yellow;
+    return color.red;
+}
+
+function updateCanvasDimensions() {
+    c.element.width = c.element.clientWidth;
+    c.element.height = c.element.clientHeight;
+}
+
+document.body.addEventListener("input", (event) => {
+    if (event.target.classList.contains("yellow")) {
+        sound.threshold.yellow = event.target.value;
+    } else if (event.target.classList.contains("green")) {
+        sound.threshold.green = event.target.value;
+    } else if (event.target.classList.contains("hold")) {
+        sound.hold = event.target.value;
+    }
 });
 
-form.querySelectorAll("input[type=range]").forEach((input) => {
-  input.dispatchEvent(new Event("input", { bubbles: true }));
+document.querySelectorAll(".slider").forEach((input) => {
+    input.dispatchEvent(new Event("input", { bubbles: true }));
 });
+
+updateCanvasDimensions();
+new ResizeObserver(updateCanvasDimensions).observe(c.element);
 
 frame();
